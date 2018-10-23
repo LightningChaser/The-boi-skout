@@ -1,1 +1,190 @@
+#include "robot.h"  //includes custom library
+#include <Servo.h>  //includes servo library
+struct Robot robot;
+Servo servoc;       //water wheel servo
+int buttonState = 0, IR_TOP = 0, i = 1;
+double distance_IR, distanceIR_top, distanceIR_left, distanceIR_right;
 
+void setup(){
+  
+  startTime = millis();
+  
+  Serial.begin(9600);
+  
+  pinMode(R_PWM, OUTPUT);     //PWM right motor
+  pinMode(L_PWM, OUTPUT);     //PWM left motor
+  pinMode(L_PIN1, OUTPUT);    //left motor pin 1
+  pinMode(L_PIN2, OUTPUT);    //left motor pin 2
+  pinMode(R_PIN1, OUTPUT);    //right motor pin 1
+  pinMode(R_PIN2, OUTPUT);    //right motor pin 2
+  
+  pinMode(trigPinF, OUTPUT);
+  pinMode(echoPinF, INPUT);
+  pinMode(trigPinR, OUTPUT);
+  pinMode(echoPinR, INPUT);
+
+  pinMode(switchPin, INPUT);
+  
+  servoc.attach(11);      //attach continous servo to pin 11 of Arduino
+
+  
+  
+}
+
+void loop(){
+
+  currentTime = millis();
+  
+  servoc.write(100);
+  
+  buttonState = digitalRead(switchPin);
+  
+  switch(robot.state){
+  
+      case START:
+      
+        Serial.println("START");
+      
+        if( currentTime - startTime >= START_END){
+
+          robot.state = RANDOM;
+          
+        }
+         
+        break;
+        
+      case RANDOM:
+      
+        Serial.println("RANDOM");
+        Serial.println();
+        
+        robot.motors.leftPWM = SPEED_HIGH;
+        robot.motors.rightPWM = SPEED_HIGH;
+        
+        if( buttonState == LOW){
+        
+          robot.state = REVERSE;
+          
+        }
+        
+        else if( IR_TOP == 0){
+        
+          robot.state = FIRE;
+          
+        }
+
+        else if( i == 0){
+
+          if(currentTime - startTime >= FIND_GOAL_1){
+
+            i++;
+            
+            robot.state = TO_WALL;
+          
+          }
+        }
+        else if ( i == 1){
+
+          if(currentTime - startTime >= FIND_GOAL_2){
+
+            i++;
+
+            robot.state = TO_WALL;
+          }
+        }
+        
+        break;
+  
+      case TO_WALL:
+
+          break;
+        
+      case FOLLOW:
+
+          break;
+      
+      case LEFT_90:
+          
+          left();
+          
+          robot.state = RANDOM;
+          
+          break;
+          
+      case RIGHT_90:
+      
+          right();
+          
+          robot.state = RANDOM;
+          
+          break;
+          
+      case REVERSE:
+      
+          reverse();
+          
+          robot.state = LEFT_90;
+          
+          break;
+          
+      case FIRE:
+      
+          servo_reverse();
+          reverse();
+          
+          robot.state = RIGHT_90;
+          
+          break;
+          
+  }
+}
+  
+void reverse(){
+  
+      Serial.println("REVERSE");
+      Serial.println();
+      
+      digitalWrite(L_PIN1, LOW);
+      digitalWrite(L_PIN2, HIGH); 
+      digitalWrite(R_PIN1, LOW);
+      digitalWrite(R_PIN2, HIGH);
+      analogWrite(R_PWM, SPEED_HIGH);
+      analogWrite(L_PWM, SPEED_HIGH);
+      delay(350);
+      
+}
+ 
+void servo_reverse(){
+ 
+      servoc.write(100);
+      
+}
+
+void right(){
+
+    Serial.println("RIGHT90");
+      Serial.println();
+      
+      digitalWrite(L_PIN1, LOW);
+      digitalWrite(L_PIN2, LOW); 
+      digitalWrite(R_PIN1, LOW);
+      digitalWrite(R_PIN2, HIGH);
+      analogWrite(R_PWM, SPEED_HIGH);
+      analogWrite(L_PWM, SPEED_STOP);
+      delay(1100);
+      
+}
+
+void left(){
+
+      Serial.println("LEFT90");
+      Serial.println();
+      
+      digitalWrite(L_PIN1, LOW);
+      digitalWrite(L_PIN2, HIGH); 
+      digitalWrite(R_PIN1, LOW);
+      digitalWrite(R_PIN2, LOW);
+      analogWrite(R_PWM, SPEED_STOP);
+      analogWrite(L_PWM, SPEED_HIGH);
+      delay(1100);
+}
