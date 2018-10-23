@@ -1,0 +1,314 @@
+/* ---------------------------------------------------------
+* Author: Group 1
+* Class: EGR10703
+* Date: 10/23/2018
+* Instructor: Professor Stevens
+* Program: midterm_code.ino
+* Description: Finds wall. Follows along walls for one minute.
+*              Continues to follow wall until nearest goal is
+*              sensed.
+* --------------------------------------------------------- */
+
+#include "robot.h"  //includes custom library
+#include <Servo.h>  //includes servo library
+struct Robot robot;
+Servo servoc;       //water wheel servo
+int buttonState = 0;
+double distance_IR, distanceIR_top, distanceIR_left, distanceIR_right;
+
+void setup(){
+  Serial.begin(9600);
+  
+  pinMode(R_PWM, OUTPUT);     //PWM right motor
+  pinMode(L_PWM, OUTPUT);     //PWM left motor
+  pinMode(L_PIN1, OUTPUT);    //left motor pin 1
+  pinMode(L_PIN2, OUTPUT);    //left motor pin 2
+  pinMode(R_PIN1, OUTPUT);    //right motor pin 1
+  pinMode(R_PIN2, OUTPUT);    //right motor pin 2
+  
+  pinMode(trigPinF, OUTPUT);
+  pinMode(echoPinF, INPUT);
+  pinMode(trigPinR, OUTPUT);
+  pinMode(echoPinR, INPUT);
+
+  pinMode(switchPin, INPUT);
+  
+  servoc.attach(11);      //attach continous servo to pin 11 of Arduino
+  
+  delay(1500);
+
+  startTime = millis();
+}
+
+void loop(){
+  
+  currentTime = millis();
+  servoc.write(100);
+  
+  updateSensors(&robot);
+  
+  buttonState = digitalRead(switchPin);
+  distance_IR = distanceIR();
+
+  switch(robot.state){
+    case GOTO_WALL:
+      Serial.println("GOTO_WALL");
+      Serial.println();
+      digitalWrite(L_PIN1, HIGH);
+      digitalWrite(L_PIN2, LOW); 
+      digitalWrite(R_PIN1, HIGH);
+      digitalWrite(R_PIN2, LOW);
+      analogWrite(R_PWM, SPEED_HIGH);
+      analogWrite(L_PWM, SPEED_HIGH + 15);
+      delay(2300);
+      
+      robot.state = RIGHT90;
+      
+      robot.motors.leftPWM = SPEED_STOP;
+      robot.motors.rightPWM = SPEED_STOP;
+      break;
+
+    case FOLLOW:
+      Serial.println("FOLLOW");
+      Serial.println();
+      if(robot.sensors.frontUltra > robot.sensors.rearUltra){
+        if(robot.sensors.frontUltra < 5 && robot.sensors.rearUltra < 5){    //turn away from wall
+          robot.motors.leftPWM = SPEED_HIGH;
+          robot.motors.rightPWM = SPEED_MED;
+        }
+        else if(robot.sensors.frontUltra > 14 && robot.sensors.rearUltra > 14){   //turn toward wall
+          robot.motors.leftPWM = SPEED_MED;
+          robot.motors.rightPWM = SPEED_HIGH;
+        }
+        else{
+          robot.motors.leftPWM = SPEED_STOP;
+          robot.motors.rightPWM = SPEED_HIGH;
+        }
+      }
+
+      if(robot.sensors.frontUltra < robot.sensors.rearUltra){
+        if(robot.sensors.frontUltra < 6 && robot.sensors.rearUltra < 6){    //turn away from wall
+          robot.motors.leftPWM = SPEED_HIGH;
+          robot.motors.rightPWM = SPEED_MED;
+        }
+        else if(robot.sensors.frontUltra > 12 && robot.sensors.rearUltra > 12){   //turn toward wall
+          robot.motors.leftPWM = SPEED_MED;
+          robot.motors.rightPWM = SPEED_HIGH;
+        }
+        else{
+          robot.motors.leftPWM = SPEED_HIGH;
+          robot.motors.rightPWM = SPEED_STOP;
+        }
+      }
+
+      distance_IR = distanceIR();
+      
+      if(distance_IR == 0){
+        robot.state = SPITOUT;
+        robot.motors.rightPWM = SPEED_STOP;
+        robot.motors.leftPWM = SPEED_STOP;
+      }
+      else if(buttonState == LOW){   //if a microswitch is triggered
+        robot.state = REVERSE;
+        robot.motors.rightPWM = SPEED_STOP;
+        robot.motors.leftPWM = SPEED_STOP;
+      }
+      else if(robot.sensors.frontUltra > 150 && robot.sensors.frontUltra < 20){
+        robot.motors.rightPWM = SPEED_HIGH;
+        robot.motors.leftPWM = SPEED_HIGH;
+        updateMotors(&robot);
+        delay(200);
+        robot.state = FOLLOW;
+      }
+      else{
+        robot.state = FOLLOW;
+      }
+      
+      if(currentTime > 60000){    //one minute
+        if(robot.sensors.frontUltra > 50 && robot.sensors.rearUltra > 50){
+          robot.state = SCORE;
+        }
+        else if(buttonState == LOW){
+          robot.state = REVERSE;
+        }
+        else if(distance_IR == 0){
+          robot.state = SPITOUT;
+        }
+        else{
+          robot.state = FOLLOW;
+        }
+      }
+      
+      break;
+
+    case REVERSE:
+      Serial.println("REVERSE");
+      Serial.println();
+      
+      digitalWrite(L_PIN1, LOW);
+      digitalWrite(L_PIN2, HIGH); 
+      digitalWrite(R_PIN1, LOW);
+      digitalWrite(R_PIN2, HIGH);
+      analogWrite(R_PWM, SPEED_HIGH);
+      analogWrite(L_PWM, SPEED_HIGH);
+      delay(350);
+
+      robot.state = RIGHT90;
+      robot.motors.rightPWM = SPEED_STOP;
+      robot.motors.leftPWM = SPEED_STOP;
+      break;
+
+    case RIGHT90:
+      Serial.println("RIGHT90");
+      Serial.println();
+      
+      digitalWrite(L_PIN1, LOW);
+      digitalWrite(L_PIN2, LOW); 
+      digitalWrite(R_PIN1, LOW);
+      digitalWrite(R_PIN2, HIGH);
+      analogWrite(R_PWM, SPEED_HIGH);
+      analogWrite(L_PWM, SPEED_STOP);
+      delay(1100);
+      
+      robot.state = FOLLOW;
+
+      robot.motors.leftPWM = SPEED_STOP;
+      robot.motors.rightPWM = SPEED_STOP;
+      break;
+
+    case SCORE:             //turn towards goal
+      Serial.println("SCORE");
+      Serial.println();
+      digitalWrite(L_PIN1, LOW);    //turn left
+      digitalWrite(L_PIN2, HIGH); 
+      digitalWrite(R_PIN1, HIGH);
+      digitalWrite(R_PIN2, LOW);
+      analogWrite(R_PWM, SPEED_HIGH);
+      analogWrite(L_PWM, SPEED_HIGH);
+      delay(800);
+
+      servoc.write(90);
+      digitalWrite(L_PIN1, LOW);
+      digitalWrite(L_PIN2, LOW); 
+      digitalWrite(R_PIN1, LOW);
+      digitalWrite(R_PIN2, LOW);
+      delay(40);
+      
+      robot.state = SPITOUT;
+      robot.motors.leftPWM = SPEED_STOP;
+      robot.motors.rightPWM = SPEED_STOP;
+      break;
+
+    case SPITOUT:     //spits out ball
+      Serial.println("Spit out");
+      servoc.write(100);
+      
+      robot.motors.leftPWM = SPEED_STOP;
+      robot.motors.rightPWM = SPEED_STOP;
+      delay(10);
+
+      buttonState = digitalRead(switchPin);
+
+      distance_IR = distanceIR();
+
+      servoc.write(90);
+      digitalWrite(L_PIN1, LOW);
+      digitalWrite(L_PIN2, LOW);
+      digitalWrite(R_PIN1, LOW);
+      digitalWrite(R_PIN2, LOW);
+      delay(40);
+        
+      digitalWrite(L_PIN1, LOW);
+      digitalWrite(L_PIN2, HIGH); 
+      digitalWrite(R_PIN1, LOW);
+      digitalWrite(R_PIN2, HIGH);
+      analogWrite(R_PWM, SPEED_HIGH);
+      analogWrite(L_PWM, SPEED_HIGH);
+      delay(40);
+        
+      servoc.write(30);
+        
+      delay(1500);
+
+      robot.state = RIGHT90;
+      break;
+        
+    default:
+      robot.state = FOLLOW;
+  }
+  
+  updateMotors(&robot);
+}
+
+void updateMotors(struct Robot *robot){
+  if(robot->motors.leftPWM > 0){    //forward
+    digitalWrite(L_PIN1, HIGH);
+    digitalWrite(L_PIN2, LOW);
+  }
+  else{                             //reverse
+    digitalWrite(L_PIN1, LOW);
+    digitalWrite(L_PIN2, HIGH);
+  }
+
+  if(robot->motors.rightPWM > 0){   //forward
+    digitalWrite(R_PIN1, HIGH);
+    digitalWrite(R_PIN2, LOW);
+  }
+  else{                             //reverse
+    digitalWrite(R_PIN1, LOW);
+    digitalWrite(R_PIN2, HIGH);
+  }
+
+  analogWrite(L_PWM, abs(robot->motors.leftPWM) + 15);    //drive motors
+  analogWrite(R_PWM, abs(robot->motors.rightPWM));  //drive motors
+}
+
+void updateSensors(struct Robot *robot){
+  //sensor triggered by HIGH pulse of 10+ microseconds
+  //give short LOW pulse beforehand to ensure a clean HIGH pulse
+  digitalWrite(trigPinF, LOW);
+  delayMicroseconds(5);
+  digitalWrite(trigPinF, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPinF, LOW);
+  
+  //read signal from sensor (duration of HIGH pulse)
+  pinMode(echoPinF, INPUT);
+  durationF = pulseIn(echoPinF, HIGH);
+  
+  robot->sensors.frontUltra = ((durationF / 2) / 29.1) - 3.0;       //convert time to cm, -2.5 because sensors not centered
+  
+  //sensor triggered by HIGH pulse of 10+ microseconds
+  //give short LOW pulse beforehand to ensure a clean HIGH pulse
+  digitalWrite(trigPinR, LOW);
+  delayMicroseconds(5);
+  digitalWrite(trigPinR, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPinR, LOW);
+  
+  //read signal from sensor (duration of HIGH pulse)
+  pinMode(echoPinR, INPUT);
+  durationR = pulseIn(echoPinR, HIGH);
+  
+  robot->sensors.rearUltra = (durationR / 2) / 29.1;             //convert time to cm
+}
+
+double distanceIR(){
+  double volt = 0;
+  double distance_top;
+  int returnBoy;
+  
+  volt = analogRead(TOP_IRPIN);
+  distance_top = (6787.0 / (volt - 3.0)) - 4.0;
+
+  distance_top = abs(distance_top);
+
+  if(distance_top < 9.5){
+    returnBoy = 0;
+  }
+  else{
+    returnBoy = 3;
+  }
+  
+  return returnBoy;
+}
